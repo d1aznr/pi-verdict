@@ -1275,6 +1275,21 @@ describe("denyPaths (ADR-0002)", () => {
 		expect(fs.readFileSync(path.join(TMP_AGENT, "config", "pi-verdict.json"), "utf8")).toContain("denyPaths");
 	});
 
+	test("template ships the starter denyPaths list, active from the next session (#49)", async () => {
+		fs.rmSync(path.join(TMP_AGENT, "config", "pi-verdict.json"), { force: true });
+		const bootstrap = makeHarness(); bootstrap.install(); // first run → template, empty rules by design
+		const raw = JSON.parse(fs.readFileSync(path.join(TMP_AGENT, "config", "pi-verdict.json"), "utf8"));
+		expect(raw.denyPaths).toEqual(["~/.ssh/", "~/.profile", "~/.gnupg", "~/.mc", "~/.zshrc", "~/.bashrc"]);
+		// second session: the starter list is live, not decorative — reading a
+		// starter-declared rc file asks (empty rules in the bootstrap session
+		// itself is the documented "changes apply to new sessions" semantics)
+		const h = makeHarness();
+		h.install();
+		await toolCall(h, "read", { path: "~/.zshrc" });
+		expect(h.confirms).toBe(1);
+		expect(h.calls.length).toBe(0);
+	});
+
 	test("/automode status shows the active denyPaths count", async () => {
 		const h = session({ denyPaths: [SENS, "/proj/other"] });
 		await h.commands["automode"].handler("", h.ctx);

@@ -89,7 +89,14 @@ pi-verdict runs on both [pi](https://github.com/badlogic/pi-mono) and [oh-my-pi]
 {
   "allow": ["^ls\\b", "^git (status|log|diff)\\b"],
   "deny":  ["rm ", "docker ", "^/etc/"],
-  "denyPaths": ["~/Documents/private", "~/work/company"],
+  "denyPaths": [
+    "~/.ssh/",
+    "~/.profile",
+    "~/.gnupg",
+    "~/.mc",
+    "~/.zshrc",
+    "~/.bashrc"
+  ],
   "builtinDenyFloor": true,
   "classifierModel": null,
   "toggleShortcut": "ctrl+shift+a"
@@ -97,7 +104,7 @@ pi-verdict runs on both [pi](https://github.com/badlogic/pi-mono) and [oh-my-pi]
 ```
 
 - `allow`/`deny` are JS regex arrays; **`deny` wins over `allow`**, both beat the classifier
-- `denyPaths` are plain paths you declare **protected** — touches trigger a terminal ask you adjudicate (non-interactive → deny); the classifier never learns the paths themselves, only that they exist. `grep`/`find`/`ls` compare their whole **search scope**: an omitted `path` (pi's default: the current directory) or a parent directory of a declared path triggers the ask as well
+- `denyPaths` are plain paths you declare **protected** — touches trigger a terminal ask you adjudicate (non-interactive → deny); the classifier never learns the paths themselves, only that they exist. `grep`/`find`/`ls` compare their whole **search scope**: an omitted `path` (pi's default: the current directory) or a parent directory of a declared path triggers the ask as well. A fresh install pre-fills a **starter list** (`~/.ssh/`, `~/.gnupg`, `~/.mc`, shell rc/profile files), active from the first session after the initial run (any config change applies to new sessions) — a pre-filled *user declaration*, not a built-in floor: edit or empty it freely, add your own (`~/Documents/private`, …) alongside; existing configs are never rewritten
 - `builtinDenyFloor: false` turns off the built-in danger/path floor (your risk; the self-protection layer below always stays on)
 - `classifierModel` pins the classifier model, e.g. `"zai/glm-5.3-flash:low"` (thinking suffix supported; default: session model with thinking off)
 

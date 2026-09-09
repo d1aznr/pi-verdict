@@ -310,10 +310,17 @@ function userConfigPath(): string {
 }
 
 const USER_CONFIG_TEMPLATE = `${JSON.stringify({
-	_hint: "pi-verdict user rules. allow/deny are JS regex arrays; deny wins over allow. Match target: bash = full command string, file tools = absolute path. denyPaths is a list of protected path prefixes (plain paths, not regexes; the tool owns normalization — ~, $HOME, relative, .. and symlink forms all resolve, case folds on macOS/Windows — and any access attempt, including from bash command strings, asks for your confirmation, degrading to deny in non-interactive sessions; priority: after your deny rules, before your allow rules; never sent to the classifier). builtinDenyFloor=false disables the built-in danger/path floor (at your own risk; the self-protection layer always stays on and cannot be turned off by any config). classifierModel persistently sets the classifier model (provider/id, e.g. zai/glm-5.3-flash; accepts a pi-native thinking suffix, e.g. zai/glm-5.3-flash:low; empty = self-reflection, inherit session model). toggleShortcut sets the master-switch toggle key (pi key combo, e.g. ctrl+shift+a; null or empty disables the shortcut). This file is part of the permission gate itself: pi-verdict denies any agent-side modification of it — edit it manually outside pi. Changes apply to new sessions.",
+	_hint: "pi-verdict user rules. allow/deny are JS regex arrays; deny wins over allow. Match target: bash = full command string, file tools = absolute path. denyPaths is a list of protected path prefixes (plain paths, not regexes; the tool owns normalization — ~, $HOME, relative, .. and symlink forms all resolve, case folds on macOS/Windows — and any access attempt, including from bash command strings, asks for your confirmation, degrading to deny in non-interactive sessions; priority: after your deny rules, before your allow rules; never sent to the classifier). The template pre-fills a starter denyPaths list (~/.ssh, ~/.gnupg, shell rc files) — edit or empty it freely, it is your declaration, not a built-in floor. builtinDenyFloor=false disables the built-in danger/path floor (at your own risk; the self-protection layer always stays on and cannot be turned off by any config). classifierModel persistently sets the classifier model (provider/id, e.g. zai/glm-5.3-flash; accepts a pi-native thinking suffix, e.g. zai/glm-5.3-flash:low; empty = self-reflection, inherit session model). toggleShortcut sets the master-switch toggle key (pi key combo, e.g. ctrl+shift+a; null or empty disables the shortcut). This file is part of the permission gate itself: pi-verdict denies any agent-side modification of it — edit it manually outside pi. Changes apply to new sessions.",
 	allow: ["^ls\\b"],
 	deny: [],
-	denyPaths: [],
+	denyPaths: [
+		"~/.ssh/",
+		"~/.profile",
+		"~/.gnupg",
+		"~/.mc",
+		"~/.zshrc",
+		"~/.bashrc",
+	],
 	builtinDenyFloor: true,
 	classifierModel: null,
 	toggleShortcut: DEFAULT_TOGGLE_SHORTCUT,
