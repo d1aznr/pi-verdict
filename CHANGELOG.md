@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+### Added
+
+- The first-run config template pre-fills a starter `denyPaths` list (`~/.ssh/`, `~/.profile`, `~/.gnupg`, `~/.mc`, `~/.zshrc`, `~/.bashrc`) so protection is on from the first session after the initial run (#49): touches of these paths — file tools and bash path tokens alike — ask for your confirmation. The list is a pre-filled *user declaration*, not a built-in floor: edit or empty it in `pi-verdict.json`; existing configs are never rewritten. (Proposed with per-key entries under `~/.ssh/`; deduplicated to the directory prefix — segment-prefix comparison already covers every file beneath it.)
+
 ### Fixed
 
 - denyPaths subtree scope for `grep`/`find`/`ls` (#48, reported in [discussion #8803](https://github.com/earendil-works/pi/discussions/8803#discussioncomment-18350257)): an omitted `path` (pi's documented default: the current directory) bypassed denyPaths entirely — a plain rule-layer allow with zero classifier involvement, leaking protected content out of the cwd. An explicit `path` pointing at a directory above a declaration fell through to classifier discretion. These tools now treat their search scope as the target: an omitted path resolves to the cwd for both user rules and denyPaths, and the comparison is bidirectional for them (declaration under the searched subtree, or cwd inside a declaration) → terminal ask, non-interactive degrades to deny. `read`/`write`/`edit` and bash token extraction keep single-target semantics — a recursive search issued from a shell (argument-less, or with a parent-directory argument) still falls to the classifier's existence hint (ADR-0002 amendment).
