@@ -1166,6 +1166,79 @@ describe("denyPaths (ADR-0002)", () => {
 		expect(h.calls.length).toBe(0);
 	});
 
+	// ── subtree scope (#48, discussion #8803): grep/find/ls search a directory
+	// subtree; an omitted path is pi's documented default (cwd). Both directions
+	// hit: cwd containing a declaration, cwd inside a declaration. ──
+	test("omitted path hits in both directions for grep/find/ls (cwd subtree scope)", async () => {
+		const trio = [["grep", { pattern: "secret" }], ["find", { pattern: "*.md" }], ["ls", {}]] as const;
+		for (const [tool, input] of trio) {
+			// descendant: the declaration sits under the cwd (previously: plain
+			// rule-layer allow — zero asks, zero classifier calls, content leak)
+			const h = session({ denyPaths: [SENS] }, { cwd: TMP_AGENT });
+			await toolCall(h, tool, input);
+			expect(h.confirms).toBe(1);
+			expect(h.calls.length).toBe(0);
+			// ancestor: the cwd sits inside the declaration
+			const h2 = session({ denyPaths: [SENS] }, { cwd: SENS });
+			await toolCall(h2, tool, input);
+			expect(h2.confirms).toBe(1);
+			expect(h2.calls.length).toBe(0);
+		}
+	});
+
+	test("explicit parent-directory path hits (bidirectional compare)", async () => {
+		// descendant via explicit path: grep over the parent of the declaration
+		// previously fell through to the classifier (scope ignored)
+		const h = session({ denyPaths: [SENS] });
+		await toolCall(h, "grep", { pattern: "secret", path: TMP_AGENT });
+		expect(h.confirms).toBe(1);
+		expect(h.calls.length).toBe(0);
+		// ancestor via explicit relative path: "." resolves into the declaration
+		const h2 = session({ denyPaths: [SENS] }, { cwd: SENS });
+		await toolCall(h2, "grep", { pattern: "secret", path: "." });
+		expect(h2.confirms).toBe(1);
+	});
+
+	test("omitted path: user allow cannot override the hit (denyPaths priority holds)", async () => {
+		const h = session({ allow: [".*"], denyPaths: [SENS] }, { cwd: TMP_AGENT });
+		await toolCall(h, "grep", { pattern: "secret" });
+		expect(h.confirms).toBe(1);
+		expect(h.calls.length).toBe(0);
+	});
+
+	test("omitted path: user deny on the cwd still wins (deny before denyPaths)", async () => {
+		const h = session({ deny: ["pi-verdict-test"], denyPaths: [SENS] }, { cwd: TMP_AGENT });
+		const r = await toolCall(h, "grep", { pattern: "secret" });
+		expect(h.confirms).toBe(0);
+		expect(r?.block).toBe(true);
+		expect(String(r?.reason)).toContain("user deny rule");
+	});
+
+	test("negative: omitted path with an unrelated cwd → no ask, rule-layer allow", async () => {
+		const h = session({ denyPaths: [SENS] }, { cwd: "/definitely-unrelated-proj" });
+		const r = await toolCall(h, "grep", { pattern: "x" });
+		expect(h.confirms).toBe(0);
+		expect(h.calls.length).toBe(0);
+		expect(r).toBeUndefined();
+	});
+
+	test("negative: sibling-prefix directory does not hit (segment boundary, subtree scope)", async () => {
+		const h = session({ denyPaths: ["/proj/personal"] }, { cwd: "/proj" });
+		const r = await toolCall(h, "grep", { pattern: "x", path: "/proj/personal-x" });
+		expect(h.confirms).toBe(0);
+		expect(h.calls.length).toBe(0);
+		expect(r).toBeUndefined();
+	});
+
+	test("headless omitted-path hit → ask degrades to deny", async () => {
+		const h = session({ denyPaths: [SENS] }, { cwd: TMP_AGENT });
+		h.ctx.hasUI = false;
+		const r = await toolCall(h, "grep", { pattern: "secret" });
+		expect(h.confirms).toBe(0);
+		expect(r?.block).toBe(true);
+		expect(String(r?.reason)).toContain("non-interactive");
+	});
+
 	test("builtinDenyFloor:false does not disable denyPaths", async () => {
 		const h = session({ denyPaths: [SENS], builtinDenyFloor: false });
 		await toolCall(h, "read", { path: path.join(SENS, "secret.md") });

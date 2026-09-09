@@ -459,13 +459,23 @@ function toolKind(toolName: string): "command" | "file" | null {
 	}
 }
 
-/** 用户规则匹配目标:bash/powershell=完整命令串;路径类工具=解析后绝对路径;其余工具不参与 */
+/** Scope tools (grep/find/ls): pi's schema makes `path` optional (default:
+ *  current directory) and the search covers a directory SUBTREE — an omitted or
+ *  empty path means the cwd is the effective target (#48). */
+function isScopeTool(toolName: string): boolean {
+	return toolName === "grep" || toolName === "find" || toolName === "ls";
+}
+
+/** 用户规则匹配目标:bash/powershell=完整命令串;路径类工具=解析后绝对路径;其余工具不参与。
+ *  Scope tools with an omitted path resolve to the cwd (#48) — user rules match
+ *  the effective target, never a null that skips the whole rule block. */
 function userRuleTarget(toolName: string, input: Record<string, unknown>, cwd: string): string | null {
 	const kind = toolKind(toolName);
 	if (kind === "command") return String(input.command ?? "");
 	if (kind === "file") {
 		const p = typeof input.path === "string" && input.path ? input.path : null;
-		return p ? path.resolve(cwd, expandHome(p)) : null;
+		if (!p) return isScopeTool(toolName) ? path.resolve(cwd) : null;
+		return path.resolve(cwd, expandHome(p));
 	}
 	return null;
 }
@@ -478,7 +488,9 @@ function userRuleTarget(toolName: string, input: Record<string, unknown>, cwd: s
 // ~ / $HOME expansion, lexical resolve against cwd, realpath resolution of
 // symlink indirection (failure — nonexistent target, glob token — degrades to
 // the lexical form). Comparison is per path segment, both sides in dual form
-// (lexical + realpath). The extractor is an evidence producer, never an
+// (lexical + realpath). Scope tools (grep/find/ls) are subtree-scoped and
+// bidirectional (#48): an omitted path means the cwd, and a declaration that
+// sits INSIDE the searched subtree hits as well. The extractor is an evidence producer, never an
 // adjudicator: a hit routes to a terminal ask (the declaring user owns the
 // exception); non-interactive sessions degrade to deny. External script
 // contents are never read (unsound by construction, ADR-0002); the classifier
@@ -502,13 +514,16 @@ function denyPathForms(raw: string, cwd: string): string[] {
 /** Normalize the configured denyPaths against one cwd (ADR-0002: anchored once per session, never re-derived) */
 const anchorDenyPaths = (paths: string[], cwd: string): string[] => paths.flatMap((b) => denyPathForms(b, cwd));
 
-/** Every path candidate a tool call exposes to denyPaths comparison (MCP/custom tools: none — classifier + hint covers) */
-function denyPathCandidates(toolName: string, input: Record<string, unknown>): string[] {
+/** Every path candidate a tool call exposes to denyPaths comparison (MCP/custom tools: none — classifier + hint covers).
+ *  Scope tools with an omitted/empty path contribute the cwd: their search scope
+ *  IS the cwd subtree (#48). */
+function denyPathCandidates(toolName: string, input: Record<string, unknown>, cwd: string): string[] {
 	const kind = toolKind(toolName);
 	if (kind === "command") return [...String(input.command ?? "").matchAll(BASH_PATH_TOKENS)].map((m) => m[0]);
 	if (kind === "file") {
-		const p = typeof input.path === "string" ? input.path : "";
-		return p ? [p] : [];
+		const p = typeof input.path === "string" && input.path ? input.path : null;
+		if (!p) return isScopeTool(toolName) ? [cwd] : [];
+		return [p];
 	}
 	return [];
 }
@@ -516,13 +531,19 @@ function denyPathCandidates(toolName: string, input: Record<string, unknown>): s
 /** Does the call touch a user-declared protected path? `bases` are the denyPaths
  *  pre-normalized ONCE at session start (anchored to the session cwd) — mid-session
  *  symlink creation or cwd drift must not change what the declaration covers.
- *  Returns the matched base for the ask dialog (UI-only plaintext, see RuleResult.detail). */
+ *  Returns the matched base for the ask dialog (UI-only plaintext, see RuleResult.detail).
+ *  Scope tools compare BIDIRECTIONALLY (#48): their search covers a subtree, so a
+ *  hit fires when the target sits under a base (single-target direction) OR a base
+ *  sits inside the searched subtree (cwd-inside-declaration, declaration-under-cwd).
+ *  False positives ask — the safe direction. read/write/edit and bash tokens stay
+ *  one-directional: single-target semantics. */
 function hitDenyPaths(toolName: string, input: Record<string, unknown>, cwd: string, bases: string[]): string | null {
 	if (bases.length === 0) return null;
-	for (const candidate of denyPathCandidates(toolName, input)) {
+	const subtree = isScopeTool(toolName);
+	for (const candidate of denyPathCandidates(toolName, input, cwd)) {
 		for (const c of denyPathForms(candidate, cwd)) {
 			for (const b of bases) {
-				if (pathEquals(c, b) || pathStartsWith(c, b)) return b;
+				if (pathEquals(c, b) || pathStartsWith(c, b) || (subtree && pathStartsWith(b, c))) return b;
 			}
 		}
 	}
@@ -836,7 +857,8 @@ function classifyByRules(toolName: string, input: Record<string, unknown>, cwd: 
 		// read keeps classifyPath even with an empty path: resolved to cwd, it still
 		// carries the system-directory gray grading (bit-for-bit with the old switch)
 		base = classifyPath(toolName, String(input.path ?? ""), cwd, false, user.builtinDenyFloor);
-	} else if (kind === "file") { // grep/find/ls: optional path, absent → plain allow
+	} else if (kind === "file") { // grep/find/ls: optional path; absent → cwd is the
+		// effective target, so user rules and denyPaths compare against it (#48)
 		const p = typeof input.path === "string" ? input.path : undefined;
 		base = p ? classifyPath(toolName, p, cwd, false, user.builtinDenyFloor) : { verdict: "allow" };
 	} else {
