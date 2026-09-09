@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-09
+
 ### Added
 
 - The first-run config template pre-fills a starter `denyPaths` list (`~/.ssh/`, `~/.profile`, `~/.gnupg`, `~/.mc`, `~/.zshrc`, `~/.bashrc`) so protection is on from the first session after the initial run (#49): touches of these paths — file tools and bash path tokens alike — ask for your confirmation. The list is a pre-filled *user declaration*, not a built-in floor: edit or empty it in `pi-verdict.json`; existing configs are never rewritten. (Proposed with per-key entries under `~/.ssh/`; deduplicated to the directory prefix — segment-prefix comparison already covers every file beneath it.)
