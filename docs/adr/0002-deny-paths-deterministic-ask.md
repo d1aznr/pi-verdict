@@ -114,3 +114,41 @@ classifier prompt leaves the machine bound for the model provider.
   review time). The "~900-line minimal" positioning no longer holds
   numerically; the README restates it as a deliberate single-file
   constraint rather than a line-count claim.
+
+## Amendment (2026-09-09): subtree-intersection scope for grep/find/ls
+
+Discussion #8803 (comment 18350257) traced — and local reproduction confirmed
+(#48) — a bypass of this ADR's core promise. `grep`/`find`/`ls` declare `path`
+optional in pi's schema ("default: current directory"), and an omitted path
+produced neither a user-rule target nor a denyPaths candidate: the call graded
+as a plain rule-layer allow, never reaching denyPaths or the classifier, and a
+recursive search of the cwd returned content out of a declared path with no
+ask. An explicit `path` pointing at a directory *above* a declaration fared
+little better — the one-directional compare (target under base) missed it and
+the call fell to classifier discretion.
+
+Two decisions:
+
+1. **A scope tool's effective target includes its search scope.** For
+   grep/find/ls an omitted or empty `path` resolves to the cwd for BOTH the
+   user-rule target and the denyPaths candidate. User rules therefore apply to
+   the resolved cwd as well; priority is unchanged (a user deny on the cwd
+   fires before the denyPaths ask).
+2. **Comparison is bidirectional for scope tools only**: a hit fires when the
+   target is under a base OR a base sits inside the searched subtree
+   (declaration under cwd / cwd inside declaration). `read`/`write`/`edit`
+   keep single-target one-directional semantics. Bash token extraction is
+   unchanged and stays one-directional: a recursive search issued from a
+   shell still misses in both spellings — argument-less (cwd default, no
+   token at all) or with a parent-directory argument — joining the documented
+   extractor holes that fall back to the classifier's existence hint.
+   Over-broad asks (e.g. `grep` over `/` with any declaration active) ask —
+   the safe direction, consistent with the URL-token precedent.
+3. **The tool-name enumeration mirrors pi's closed built-in registry** (it
+   shares the `toolKind` dispatch). An agent cannot register tools mid-session;
+   a name outside the registry is an MCP/custom tool, which lands in the gray
+   zone with the existence hint by design. An incomplete enumeration therefore
+   degrades to classifier scrutiny — never to a silent allow: the enumeration
+   decides *deterministic ask vs classifier*, not *ask vs pass*. New built-in
+   file tools in future pi versions are an existing maintenance point of the
+   dispatch, not a bypass of it.
