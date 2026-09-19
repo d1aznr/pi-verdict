@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-19
+
 ### Added
 
 - Second transport for the jev decisions backend (#55 follow-up): `PI_VERDICT_JEV_TRANSPORT=typesafe` targets TypeSafe's official v1 API (`POST api.typesafe.ai/v1/systemone`, credentials via `TYPESAFE_API_KEY` from console.typesafe.ai) instead of OpenRouter's alpha decisions endpoint. The two wire contracts are isomorphic (live-verified 2026-09-19: same `{state, questions}` body, answers carry choice/probabilities/confidence, usage snake_case) — verdict text, timeouts, and fail-closed semantics are unchanged; the TypeSafe API does not report per-call cost (it shows as $0). `PI_VERDICT_JEV_URL` now overrides whichever transport is active. Default stays `openrouter` (pi's OpenRouter login reuse).
