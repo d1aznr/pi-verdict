@@ -24,7 +24,11 @@
 		"security",
 		"tool-call",
 		"classifier",
-		"ai-agent"
+		"ai-agent",
+		"jev",
+		"typesafe",
+		"decisions",
+		"openrouter"
 	],
 	"repository": {
 		"type": "git",
