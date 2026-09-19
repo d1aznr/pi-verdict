@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-19
+
 ### Added
 
 - Optional allow-visibility preference (#60): `notifyAllows: true` in `pi-verdict.json` surfaces every classifier allow as an info notification (verdict reason + action line — e.g. jev's probability breakdown), default `false`. Mechanical passes (allow-rule echoes, protected-path confirms) never notify under it; the debug switch keeps its diagnostic scope unchanged, shadow-cache annotations stay debug-only, and with both on the notification appears exactly once. Config-only, new-session semantics.
