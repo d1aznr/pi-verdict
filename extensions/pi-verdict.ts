@@ -999,6 +999,9 @@ interface ClassifierOutcome {
 const CLASSIFIER_TIMEOUT_MS = 25_000; // 本网关 CC 分类器分布 p90=19.8s(15s 会误杀 ~15%),research/cache-sim 数据
 const CLASSIFIER_MAX_TOKENS = 512;
 const CLASSIFIER_RETRY_MAX_TOKENS = 1024; // 防御重试档:覆盖无视 reasoning:off 或轻思考仍超预算的模型
+const APIS_WITHOUT_TEMPERATURE = new Set<string>([
+	"openai-codex-responses",
+]);
 
 /**
  * Minimal structural shape of a completion call (#35). pi exposes it as
@@ -1011,7 +1014,7 @@ export type CompletionFn = (
 	model: NonNullable<ExtensionContext["model"]>,
 	context: { systemPrompt?: string; messages: unknown[] },
 	options?: Record<string, unknown>,
-) => Promise<{ content: Array<{ type: string; text: string }>; stopReason?: string }>;
+) => Promise<{ content: Array<{ type: string; text: string }>; stopReason?: string; errorMessage?: string }>;
 
 type CompatLoader = () => Promise<{ complete: CompletionFn }>;
 
@@ -1063,7 +1066,7 @@ async function callClassifierOnce(
 	maxTokens: number,
 	thinking: ThinkingLevel = "off",
 	systemPrompt: string = CLASSIFIER_SYSTEM,
-): Promise<{ ok: true; text: string; stopReason: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; text: string; stopReason: string; errorMessage?: string } | { ok: false; error: string }> {
 	const signals = [AbortSignal.timeout(CLASSIFIER_TIMEOUT_MS)];
 	if (signal) signals.push(signal);
 	try {
@@ -1076,7 +1079,7 @@ async function callClassifierOnce(
 			{
 				signal: AbortSignal.any(signals),
 				maxTokens,
-				temperature: 0,
+				...(APIS_WITHOUT_TEMPERATURE.has(model.api) ? {} : { temperature: 0 }),
 				// Thinking params go out in both hosts' native dialects (#35):
 				// pi's registry.complete consumes thinkingEnabled/effort (the
 				// API-native fields, per the blackhole findings in
@@ -1104,7 +1107,7 @@ async function callClassifierOnce(
 			.filter((b) => b.type === "text")
 			.map((b) => b.text)
 			.join("");
-		return { ok: true, text, stopReason: response.stopReason ?? "unknown" };
+		return { ok: true, text, stopReason: response.stopReason ?? "unknown", errorMessage: response.errorMessage };
 	} catch (err) {
 		return { ok: false, error: err instanceof Error ? err.message : String(err) };
 	}
@@ -1134,7 +1137,7 @@ async function classifyWithModel(
 		if (signal?.aborted) break; // 用户已取消,不再重试
 		const r = await callClassifierOnce(host, signal, complete, model, userMessage, maxTokens, thinking, systemPrompt);
 		if (r.ok) {
-			const diag = `stopReason=${r.stopReason}, model=${model.id}, raw output=${JSON.stringify(r.text.slice(0, 200))}`;
+			const diag = `stopReason=${r.stopReason}, model=${model.id}, errorMessage=${JSON.stringify(r.errorMessage ?? null)}, raw output=${JSON.stringify(r.text.slice(0, 200))}`;
 			if (r.stopReason !== "error" && r.stopReason !== "aborted") {
 				const parsed = parseVerdict(r.text);
 				if (parsed) return { ...parsed, source: "model" };
