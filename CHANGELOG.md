@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+### Added
+
+- Optional jev classifier backend (#55): `classifierModel: "typesafe/jev-latest"` routes gray-zone verdicts through TypeSafe's jev decisions model. A bundled adapter extension (`extensions/jev-adapter.ts`, auto-loaded with the package, individually disable-able via `pi config`) registers the model in pi's registry and translates the classifier call into one OpenRouter `choice` question (`POST /api/alpha/decisions`), synthesizing the usual `<verdict>` text with probabilities and confidence — timeouts and fail-closed semantics unchanged. Credentials reuse pi's OpenRouter login (`/login openrouter`) with `OPENROUTER_API_KEY` as fallback (no separate typesafe account); the endpoint is overridable via `PI_VERDICT_JEV_URL` (alpha API). Known limitations and the alternatives considered are recorded in ADR-0003: the denyPaths existence hint does not reach jev (denyPaths themselves stay rule-enforced before the classifier); jev "does not treat [state] as hostile by default" per TypeSafe docs, so adversarial transcript content can move its judgment; omp hosts stay inert; reasons are templated probabilities. Selecting the model as the session model warns — it generates no text.
+
 ## [0.7.1] - 2026-09-09
 
 ### Added
