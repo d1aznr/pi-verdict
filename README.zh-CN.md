@@ -108,6 +108,7 @@ pi-verdict 同时支持 [pi](https://github.com/badlogic/pi-mono) 与 [oh-my-pi]
 - `denyPaths` 是你声明**受保护**的普通路径列表:触碰触发**终局 ask** 由你裁决(非交互降级 deny);分类器只被告知路径**存在**,路径明文永不出本机。`grep`/`find`/`ls` 按**整个搜索范围**比较:省略 `path`(pi 默认:当前目录)或传入位于声明路径之上的父目录,同样触发 ask。全新安装会预填一份**入门列表**(`~/.ssh/`、`~/.gnupg`、`~/.mc`、shell rc/profile 文件),自初次运行后的第一个会话起生效(一切配置变更均自新会话生效)——它是预填的*用户声明*而非内置 floor:可随意增删清空,也可与自己的路径(`~/Documents/private`、……)并列;既有配置永不被改写
 - `builtinDenyFloor: false` 整体关闭内置危险/路径拦截(风险自担;下方自保护层永远开启)
 - `classifierModel` 指定分类器模型,如 `"zai/glm-5.3-flash:low"`(支持思考后缀;缺省 = 会话模型且显式关思考)
+- `classifierModel: "typesafe/jev-latest"` 启用随包的 **jev 决策适配器**——灰区裁决经 OpenRouter 的 TypeSafe jev(`/api/alpha/decisions`)完成,复用 pi 的 OpenRouter 登录态;实验性质,详见 [ADR-0003](docs/adr/0003-jev-decisions-adapter.md)
 
 没有内置白名单——每一条「永远放行」声明都归你([为什么](docs/configuration.md#why-no-built-in-allowlist))。完整参考:[docs/configuration.md](docs/configuration.md)。
 
