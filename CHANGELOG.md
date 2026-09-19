@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-19
+
 ### Changed
 
 - Shortened the first-run config template `_hint` to the decision-critical lines plus a pointer to the full configuration reference (~1.9KB → ~0.7KB): match targets, path-normalization details, thinking suffixes, and the jev backend note now live only in `docs/configuration.md`.
