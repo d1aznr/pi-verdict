@@ -109,7 +109,7 @@ pi-verdict runs on both [pi](https://github.com/badlogic/pi-mono) and [oh-my-pi]
 - `denyPaths` are plain paths you declare **protected** — touches trigger a terminal ask you adjudicate (non-interactive → deny); the classifier never learns the paths themselves, only that they exist. `grep`/`find`/`ls` compare their whole **search scope**: an omitted `path` (pi's default: the current directory) or a parent directory of a declared path triggers the ask as well. A fresh install pre-fills a **starter list** (`~/.ssh/`, `~/.gnupg`, `~/.mc`, shell rc/profile files), active from the first session after the initial run (any config change applies to new sessions) — a pre-filled *user declaration*, not a built-in floor: edit or empty it freely, add your own (`~/Documents/private`, …) alongside; existing configs are never rewritten
 - `builtinDenyFloor: false` turns off the built-in danger/path floor (your risk; the self-protection layer below always stays on)
 - `classifierModel` pins the classifier model, e.g. `"zai/glm-5.3-flash:low"` (thinking suffix supported; default: session model with thinking off)
-- `classifierModel: "typesafe/jev-latest"` opts into the bundled **jev decisions adapter** — gray-zone verdicts via TypeSafe's jev on OpenRouter (`/api/alpha/decisions`), reusing your pi OpenRouter login; experimental, see [ADR-0003](docs/adr/0003-jev-decisions-adapter.md)
+- `classifierModel: "typesafe/jev-latest"` opts into the bundled **jev decisions adapter** — gray-zone verdicts via TypeSafe's jev (OpenRouter by default, or TypeSafe's official API directly with `PI_VERDICT_JEV_TRANSPORT=typesafe`); experimental, see [ADR-0003](docs/adr/0003-jev-decisions-adapter.md)
 - `audit: true` records every **gray-zone adjudication** (the full transcript sent to the classifier, its raw response, the parsed verdict) as JSONL under `~/.pi/agent/verdicts/<sessionId>.jsonl` — one file per session, the 20 most recent kept. Local-only and full-fidelity (protected-path plaintext may appear — it never leaves your machine; [ADR-0002](docs/adr/0002-deny-paths-deterministic-ask.md) boundary note); the agent can neither read nor write the directory. `/automode` shows the audit state and path while on
 - `notifyAllows: true` notifies on every **classifier allow** (reason + action line — e.g. jev's probability breakdown); default `false` keeps passes silent. Mechanical passes (your own allow rules, protected-path confirms) never notify; shadow-cache annotations stay debug-only; with both switches on the notification appears once
 
@@ -118,17 +118,17 @@ No built-in allowlist — every "always allow" claim is yours ([why](docs/config
 ### Jev decisions backend (experimental — [ADR-0003](docs/adr/0003-jev-decisions-adapter.md))
 
 1. Install a version that ships the adapter (v0.8+): `pi install npm:pi-verdict`
-2. Get your OpenRouter credentials ready (OpenRouter is the only transport for now)
-   - run `/login openrouter` inside pi
-   - or `export OPENROUTER_API_KEY=sk-or-v1...` in your shell
+2. Pick a transport (both serve the same decisions wire contract):
+   - **OpenRouter (default)**: run `/login openrouter` inside pi, or `export OPENROUTER_API_KEY=sk-or-v1...` in your shell
+   - **TypeSafe direct (official v1 API)**: grab a self-service key at console.typesafe.ai, then `export TYPESAFE_API_KEY=apikey_...` and `export PI_VERDICT_JEV_TRANSPORT=typesafe`
 3. Point the classifier at jev (applies to new sessions)
    - persistent: edit `~/.pi/agent/config/pi-verdict.json` outside pi and set `{ "classifierModel": "typesafe/jev-latest" }`
    - or try it once: `PI_AUTO_MODE_MODEL=typesafe/jev-latest pi`
 
 **Limits**:
-- **Provider**: OpenRouter only, for now
+- **Transports**: OpenRouter decisions (default) or TypeSafe direct — on the TypeSafe transport per-call cost shows $0 (its API does not report it)
 - **Hosts**: pi only. On omp the setting warns and falls back to the session model; and it must never be selected as the session model (no text generation — selecting it warns)
-- **Escape hatch**: `PI_VERDICT_JEV_URL` overrides the decisions endpoint (alpha API)
+- **Escape hatch**: `PI_VERDICT_JEV_URL` overrides the active transport's endpoint (OpenRouter's is an alpha API)
 
 ### Self-protection (the gate guards itself — [ADR-0001](docs/adr/0001-self-protection-layer.md))
 

@@ -74,7 +74,7 @@ Auto Mode 门禁的启用状态:会话内存态,默认开启。有三个操作�
 
 ### jev 适配器 (jev adapter)
 
-随包分发的伴生扩展:在 pi 模型注册表中把 typesafe 的 jev 呈现为一个模型(`typesafe/jev-latest`),将分类器的模型调用翻译为 OpenRouter decisions 请求、把类型化决策合成为裁决前缀契约文本。仅在 `classifierModel` 指向它且凭证可解析时参与判定,否则惰性无效(分类器按既有逻辑回退)。凭证沿用 pi 的 OpenRouter 登录态,不经扩展自带通道。
+随包分发的伴生扩展:在 pi 模型注册表中把 typesafe 的 jev 呈现为一个模型(`typesafe/jev-latest`),将分类器的模型调用翻译为 decisions 请求(默认 OpenRouter 端点,或 `PI_VERDICT_JEV_TRANSPORT=typesafe` 直连官方 v1 API)、把类型化决策合成为裁决前缀契约文本。仅在 `classifierModel` 指向它且凭证可解析时参与判定,否则惰性无效(分类器按既有逻辑回退)。凭证均经 provider 凭证管道:openrouter transport 沿用 pi 的 OpenRouter 登录态,typesafe transport 读 `TYPESAFE_API_KEY`(pi 无 typesafe 登录可复用);不经扩展自带通道。
 
 ### 类型化决策 (typed decision)
 

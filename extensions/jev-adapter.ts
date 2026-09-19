@@ -2,18 +2,29 @@
  * pi-verdict jev adapter (ADR-0003) — exposes TypeSafe's jev decisions model
  * as a pi provider (`typesafe/jev-latest`) so `classifierModel` can name it.
  *
- * jev is not an LLM: OpenRouter serves it only through the decisions endpoint
- * (`POST /api/alpha/decisions`, request `{model, state, questions}`), which is
- * why the model cannot ride pi's built-in `openrouter` provider. This adapter
- * translates the classifier's completion call into one `choice` question and
- * synthesizes the `<verdict>…</verdict>` contract text from the typed answer.
+ * jev is not an LLM: its decisions API takes `{state, questions}` and returns
+ * typed answers, which is why the model cannot ride pi's chat-completions
+ * providers. Two transports (PI_VERDICT_JEV_TRANSPORT, default `openrouter`),
+ * whose wire contracts are isomorphic except for the model slug
+ * (live-verified 2026-09-19: same `{state, questions}` body; answers carry
+ * choice/probabilities/confidence; usage snake_case, TypeSafe's own API omits
+ * `cost` and mapUsage defaults it to 0):
+ *   - `openrouter`: POST /api/alpha/decisions, model `~typesafe/jev-latest`,
+ *     credentials reuse pi's OpenRouter login with OPENROUTER_API_KEY fallback
+ *     (no second credential channel);
+ *   - `typesafe`: POST api.typesafe.ai/v1/systemone, model `jev-latest` —
+ *     TypeSafe's official v1 API. pi has no typesafe login, so TYPESAFE_API_KEY
+ *     is this transport's only source, still resolved through the provider
+ *     auth pipeline rather than a bare fetch (ADR-0003 amendment).
  *
- * Credentials reuse pi's OpenRouter login (no second credential channel):
- * request-time auth resolves via `ctx.modelRegistry.getProviderAuth("openrouter")`
- * with `OPENROUTER_API_KEY` as fallback. Because `hasConfiguredAuth` reads a
- * sync snapshot built before any extension event fires, the provider is
- * re-registered on `session_start` to re-run the availability check with the
- * stashed resolver (see ADR-0003).
+ * This adapter translates the classifier's completion call into one `choice`
+ * question and synthesizes the `<verdict>…</verdict>` contract text from the
+ * typed answer. The transport is pinned at provider creation (env is
+ * process-constant), so provider metadata, auth, and request routing always
+ * agree. Because `hasConfiguredAuth` reads a sync snapshot built
+ * before any extension event fires, the provider is re-registered on
+ * `session_start` to re-run the availability check with the stashed
+ * resolver (see ADR-0003).
  *
  * Known limitations (ADR-0003): the classifier system prompt — including the
  * denyPaths existence hint — does not reach jev; jev treats state as data and
@@ -36,11 +47,63 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export const PROVIDER_ID = "typesafe";
 export const MODEL_ID = "jev-latest";
-/** Wire slug OpenRouter resolves to the newest jev snapshot. */
-export const WIRE_MODEL = "~typesafe/jev-latest";
 export const API_ID = "jev-decisions";
-export const DEFAULT_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
-export const DECISIONS_URL = process.env.PI_VERDICT_JEV_URL?.trim() || DEFAULT_DECISIONS_URL;
+
+export const TRANSPORTS = ["openrouter", "typesafe"] as const;
+export type Transport = (typeof TRANSPORTS)[number];
+
+/** Everything that differs between transports, in one place: the decisions
+ * endpoint, the model slug it expects (OpenRouter wants the `~latest` alias;
+ * TypeSafe's own API wants the bare slug), the provider/auth display names,
+ * the credential sources, and the missing-key error hint. PI_VERDICT_JEV_URL
+ * overrides either endpoint. */
+export interface TransportConfig {
+	/** Decisions endpoint (PI_VERDICT_JEV_URL overrides). */
+	url: string;
+	/** Model slug this endpoint expects. */
+	wireModel: string;
+	providerName: string;
+	authName: string;
+	/** Env var carrying the API key. */
+	keyEnv: "OPENROUTER_API_KEY" | "TYPESAFE_API_KEY";
+	/** Pi provider-auth id when a pi login exists to reuse; absent = env-only. */
+	loginProvider?: "openrouter";
+	/** Completes "no API key resolved (…)". */
+	keyHint: string;
+}
+
+export const TRANSPORT_DEFAULTS: Record<Transport, TransportConfig> = {
+	openrouter: {
+		url: "https://openrouter.ai/api/alpha/decisions",
+		wireModel: "~typesafe/jev-latest",
+		providerName: "TypeSafe (jev via OpenRouter)",
+		authName: "OpenRouter credentials (reused for jev)",
+		keyEnv: "OPENROUTER_API_KEY",
+		loginProvider: "openrouter",
+		keyHint: "openrouter login or OPENROUTER_API_KEY",
+	},
+	typesafe: {
+		url: "https://api.typesafe.ai/v1/systemone",
+		wireModel: "jev-latest",
+		providerName: "TypeSafe (jev direct)",
+		authName: "TYPESAFE_API_KEY",
+		keyEnv: "TYPESAFE_API_KEY",
+		keyHint: "TYPESAFE_API_KEY",
+	},
+};
+
+/** Unknown or unset values fall back to `openrouter` (the historical default). */
+export function activeTransport(): Transport {
+	return process.env.PI_VERDICT_JEV_TRANSPORT?.trim().toLowerCase() === "typesafe" ? "typesafe" : "openrouter";
+}
+
+export function decisionsUrl(transport: Transport = activeTransport()): string {
+	return process.env.PI_VERDICT_JEV_URL?.trim() || TRANSPORT_DEFAULTS[transport].url;
+}
+
+export function wireModel(transport: Transport = activeTransport()): string {
+	return TRANSPORT_DEFAULTS[transport].wireModel;
+}
 
 const VERDICTS = ["allow", "ask", "deny"] as const;
 type Verdict = (typeof VERDICTS)[number];
@@ -84,8 +147,8 @@ export function extractState(context: { messages: unknown[] }): string {
 	return state;
 }
 
-export function buildDecisionsBody(state: string, wireModel: string = WIRE_MODEL): Record<string, unknown> {
-	return { model: wireModel, state, questions: VERDICT_QUESTIONS };
+export function buildDecisionsBody(state: string, model: string = wireModel()): Record<string, unknown> {
+	return { model, state, questions: VERDICT_QUESTIONS };
 }
 
 interface DecisionAnswer {
@@ -130,7 +193,7 @@ function mapUsage(u: unknown): AssistantMessage["usage"] {
 	};
 }
 
-function streamDecisions(model: Model<string>, context: Context, options: StreamOptions | SimpleStreamOptions | undefined, fetcher: typeof fetch): AssistantMessageEventStream {
+function streamDecisions(transport: Transport, model: Model<string>, context: Context, options: StreamOptions | SimpleStreamOptions | undefined, fetcher: typeof fetch): AssistantMessageEventStream {
 	const stream = createAssistantMessageEventStream();
 	void (async () => {
 		const output: AssistantMessage = {
@@ -146,11 +209,11 @@ function streamDecisions(model: Model<string>, context: Context, options: Stream
 		try {
 			stream.push({ type: "start", partial: output });
 			const apiKey = options?.apiKey;
-			if (!apiKey) throw new Error("jev adapter: no API key resolved (openrouter login or OPENROUTER_API_KEY)");
-			const response = await fetcher(DECISIONS_URL, {
+			if (!apiKey) throw new Error(`jev adapter: no API key resolved (${TRANSPORT_DEFAULTS[transport].keyHint})`);
+			const response = await fetcher(decisionsUrl(transport), {
 				method: "POST",
 				headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-				body: JSON.stringify(buildDecisionsBody(extractState(context))),
+				body: JSON.stringify(buildDecisionsBody(extractState(context), wireModel(transport))),
 				signal: options?.signal,
 			});
 			const text = await response.text();
@@ -181,50 +244,62 @@ function streamDecisions(model: Model<string>, context: Context, options: Stream
 	return stream;
 }
 
-/** Input $0.042/MTok, output free (research/typesafe-jev-classifiermodel.md,
- * verified against live usage.cost). Context ceiling is undocumented upstream;
+/** Input $0.042/MTok, output free (research/typesafe-jev-classifiermodel.md).
+ * OpenRouter settles per-call cost in usage; TypeSafe's own API omits it and
+ * mapUsage defaults it to 0. Context ceiling is undocumented upstream;
  * 30k matches the classifier transcript budget with margin. */
-const JEV_MODEL: Model<typeof API_ID> = {
-	id: MODEL_ID,
-	name: "Jev (latest, decisions)",
-	api: API_ID,
-	provider: PROVIDER_ID,
-	baseUrl: DECISIONS_URL,
-	reasoning: false,
-	input: ["text"],
-	cost: { input: 0.042, output: 0, cacheRead: 0, cacheWrite: 0 },
-	contextWindow: 30_000,
-	maxTokens: 512,
-};
+function jevModel(transport: Transport): Model<typeof API_ID> {
+	return {
+		id: MODEL_ID,
+		name: "Jev (latest, decisions)",
+		api: API_ID,
+		provider: PROVIDER_ID,
+		baseUrl: decisionsUrl(transport),
+		reasoning: false,
+		input: ["text"],
+		cost: { input: 0.042, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 30_000,
+		maxTokens: 512,
+	};
+}
 
 type OpenRouterKeyResolver = () => Promise<string | undefined>;
 
 export function createJevProvider(openRouterKey: OpenRouterKeyResolver | undefined, fetcher: typeof fetch = fetch): Provider {
+	// Transport is pinned at creation: env is constant for the process
+	// lifetime, and pinning keeps provider metadata, auth, and request
+	// routing in agreement (no half-switched state).
+	const transport = activeTransport();
+	const config = TRANSPORT_DEFAULTS[transport];
 	return createProvider({
 		id: PROVIDER_ID,
-		name: "TypeSafe (jev via OpenRouter)",
-		baseUrl: DECISIONS_URL,
+		name: config.providerName,
+		baseUrl: decisionsUrl(transport),
 		auth: {
-			// Ambient-only (no login): credentials come from pi's OpenRouter
-			// login or the env fallback, never from a typesafe-specific store.
+			// Ambient-only (no login): the openrouter transport reuses pi's
+			// OpenRouter login or the env fallback; the typesafe transport has
+			// no pi credential store (pi has no typesafe provider) and reads
+			// TYPESAFE_API_KEY only. Neither path opens a second channel.
 			apiKey: {
-				name: "OpenRouter credentials (reused for jev)",
+				name: config.authName,
 				resolve: async () => {
 					let key: string | undefined;
-					try {
-						key = await openRouterKey?.();
-					} catch {
-						/* getProviderAuth may reject on auth-store errors; env still applies */
+					if (config.loginProvider) {
+						try {
+							key = await openRouterKey?.();
+						} catch {
+							/* getProviderAuth may reject on auth-store errors; env still applies */
+						}
 					}
-					key ||= process.env.OPENROUTER_API_KEY?.trim();
-					return key ? { auth: { apiKey: key }, source: "openrouter" } : undefined;
+					key ||= process.env[config.keyEnv]?.trim();
+					return key ? { auth: { apiKey: key }, source: transport } : undefined;
 				},
 			},
 		},
-		models: [JEV_MODEL],
+		models: [jevModel(transport)],
 		api: {
-			stream: (m, c, o) => streamDecisions(m, c, o, fetcher),
-			streamSimple: (m, c, o) => streamDecisions(m, c, o, fetcher),
+			stream: (m, c, o) => streamDecisions(transport, m, c, o, fetcher),
+			streamSimple: (m, c, o) => streamDecisions(transport, m, c, o, fetcher),
 		},
 	});
 }

@@ -111,7 +111,7 @@ pi-verdict 同时支持 [pi](https://github.com/badlogic/pi-mono) 与 [oh-my-pi]
 - `denyPaths` 是你声明**受保护**的普通路径列表:触碰触发**终局 ask** 由你裁决(非交互降级 deny);分类器只被告知路径**存在**,路径明文永不出本机。`grep`/`find`/`ls` 按**整个搜索范围**比较:省略 `path`(pi 默认:当前目录)或传入位于声明路径之上的父目录,同样触发 ask。全新安装会预填一份**入门列表**(`~/.ssh/`、`~/.gnupg`、`~/.mc`、shell rc/profile 文件),自初次运行后的第一个会话起生效(一切配置变更均自新会话生效)——它是预填的*用户声明*而非内置 floor:可随意增删清空,也可与自己的路径(`~/Documents/private`、……)并列;既有配置永不被改写
 - `builtinDenyFloor: false` 整体关闭内置危险/路径拦截(风险自担;下方自保护层永远开启)
 - `classifierModel` 指定分类器模型,如 `"zai/glm-5.3-flash:low"`(支持思考后缀;缺省 = 会话模型且显式关思考)
-- `classifierModel: "typesafe/jev-latest"` 启用随包的 **jev 决策适配器**——灰区裁决经 OpenRouter 的 TypeSafe jev(`/api/alpha/decisions`)完成,复用 pi 的 OpenRouter 登录态;实验性质,详见 [ADR-0003](docs/adr/0003-jev-decisions-adapter.md)
+- `classifierModel: "typesafe/jev-latest"` 启用随包的 **jev 决策适配器**——灰区裁决经 TypeSafe jev 完成(默认 OpenRouter,或 `PI_VERDICT_JEV_TRANSPORT=typesafe` 直连官方 API);实验性质,详见 [ADR-0003](docs/adr/0003-jev-decisions-adapter.md)
 - `audit: true` 把每次**灰区裁决**(发给分类器的完整转录、其原始响应、解析出的裁决)以 JSONL 记录到 `~/.pi/agent/verdicts/<sessionId>.jsonl`——按会话一分文件,保留最近 20 个。仅存本机且全保真(受保护路径明文可能出现——永不出本机;[ADR-0002](docs/adr/0002-deny-paths-deterministic-ask.md) 边界注);agent 对该目录读写双拒。开启时 `/automode` 会显示审计状态与路径
 - `notifyAllows: true` 对每次 **classifier 放行**发通知(reason + action 行——如 jev 的概率分解);默认 `false` 保持放行静默。机械放行(你自己的 allow 规则、protected-path 确认)永不通知;shadow 标注仍属 debug;两开关同开时通知只出现一次
 
@@ -120,17 +120,17 @@ pi-verdict 同时支持 [pi](https://github.com/badlogic/pi-mono) 与 [oh-my-pi]
 ### Jev 决策后端(实验性——[ADR-0003](docs/adr/0003-jev-decisions-adapter.md))
 
 1. 安装含适配器的版本( v0.8 及以上):  `pi install npm:pi-verdict`
-2. 备好 OpenRouter 凭证（暂时只支持 OpenRouter）
-  - pi 内执行 `/login openrouter`
-  - 或 shell 里 `export OPENROUTER_API_KEY=sk-or-v1...`
+2. 选一条 transport(两条走同一 decisions wire 契约):
+  - **OpenRouter(默认)**: pi 内执行 `/login openrouter`,或 shell 里 `export OPENROUTER_API_KEY=sk-or-v1...`
+  - **TypeSafe 直连(官方 v1 API)**: 在 console.typesafe.ai 自助发 key,然后 `export TYPESAFE_API_KEY=apikey_...` 并 `export PI_VERDICT_JEV_TRANSPORT=typesafe`
 3. 把分类器指到 jev（新会话生效）
   - 持久：在 pi 之外编辑 `~/.pi/agent/config/pi-verdict.json` 并设置 `{ "classifierModel": "typesafe/jev-latest" }`
   - 或者临时试一把：`PI_AUTO_MODE_MODEL=typesafe/jev-latest pi`
 
 **限制**:
-- **Provider**: 暂时只支持 OpenRouter
+- **Transport**: OpenRouter decisions(默认)或 TypeSafe 直连——TypeSafe 侧单次成本显示 $0(其 API 不返回 cost)
 - **宿主**:仅支持pi。omp 上该设置会警告并回退会话模型。也绝不能选作会话主模型(不生成文本,选中即警告)
-- **逃生口**:`PI_VERDICT_JEV_URL` 可覆盖 decisions 端点(alpha 接口)
+- **逃生口**:`PI_VERDICT_JEV_URL` 可覆盖当前 transport 的端点(OpenRouter 侧为 alpha 接口)
 
 ### 自保护(门禁守护自身——[ADR-0001](docs/adr/0001-self-protection-layer.md))
 
