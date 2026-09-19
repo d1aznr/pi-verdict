@@ -111,6 +111,16 @@ pi-verdict runs on both [pi](https://github.com/badlogic/pi-mono) and [oh-my-pi]
 
 No built-in allowlist — every "always allow" claim is yours ([why](docs/configuration.md#why-no-built-in-allowlist)). Full reference: [docs/configuration.md](docs/configuration.md).
 
+### Jev decisions backend (experimental — [ADR-0003](docs/adr/0003-jev-decisions-adapter.md))
+
+`classifierModel: "typesafe/jev-latest"` sends gray-zone verdicts through TypeSafe's jev — a **decisions model, not an LLM**. Answers arrive as a typed choice with probabilities and confidence (`jev: ask 63% (confidence 45%; allow 35%, deny 2%)`) at ~1.2s and ~$0.000015 per verdict.
+
+- **Setup**: needs a version shipping `extensions/jev-adapter.ts` (git installs today, npm after the next release). Credentials: run `/login openrouter` inside pi, or export `OPENROUTER_API_KEY` — no separate typesafe account
+- **Provider**: OpenRouter transport only; the model rides the adapter-registered `typesafe` provider, not pi's built-in `openrouter` provider (chat completions only, cannot serve decisions models)
+- **Hosts**: pi only — on omp the setting falls back to the session model with a warning. Never usable as the session model itself (no text generation — selecting it warns)
+- **Capability limits**: reasons are templated probabilities, not natural language; the denyPaths existence hint and thinking suffixes don't reach it; jev "does not treat state as hostile by default" (TypeSafe docs) — adversarial transcript content can move its judgment, so the rule layer stays the primary defense
+- **Escape hatch**: `PI_VERDICT_JEV_URL` overrides the decisions endpoint (alpha API)
+
 ### Self-protection (the gate guards itself — [ADR-0001](docs/adr/0001-self-protection-layer.md))
 
 The gate's own files — the config and the installed extension copy — are **user-editable only**: writes from inside the gate hard-deny (reads pass); your editor never passes through the gate, the sudoers/visudo precedent.

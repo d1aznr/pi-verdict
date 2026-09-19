@@ -112,6 +112,16 @@ pi-verdict 同时支持 [pi](https://github.com/badlogic/pi-mono) 与 [oh-my-pi]
 
 没有内置白名单——每一条「永远放行」声明都归你([为什么](docs/configuration.md#why-no-built-in-allowlist))。完整参考:[docs/configuration.md](docs/configuration.md)。
 
+### Jev 决策后端(实验性——[ADR-0003](docs/adr/0003-jev-decisions-adapter.md))
+
+`classifierModel: "typesafe/jev-latest"` 让灰区裁决走 TypeSafe 的 jev——**决策模型,不是 LLM**。答案以带概率与置信度的类型化选项返回(`jev: ask 63% (confidence 45%; allow 35%, deny 2%)`),单次约 1.2s、约 $0.000015。
+
+- **安装**:需包含 `extensions/jev-adapter.ts` 的版本(git 安装现已可用,npm 待下个发版)。凭证:pi 内执行 `/login openrouter`,或导出 `OPENROUTER_API_KEY`——无需单独的 typesafe 账号
+- **Provider**:仅经 OpenRouter 传输;模型挂在适配器注册的 `typesafe` provider 上,而非 pi 内置 `openrouter` provider(后者只讲 chat completions,服务不了决策模型)
+- **宿主**:仅 pi——omp 上该设置会警告并回退会话模型。也绝不能选作会话主模型(不生成文本,选中即警告)
+- **能力限制**:reason 是模板化概率而非自然语言;denyPaths 存在性话术与思考后缀均不送达;jev 官方声明「state 默认不按敌意输入处理」——对抗性 transcript 内容可移动其判定,规则层仍是主防线
+- **逃生口**:`PI_VERDICT_JEV_URL` 可覆盖 decisions 端点(alpha 接口)
+
 ### 自保护(门禁守护自身——[ADR-0001](docs/adr/0001-self-protection-layer.md))
 
 门禁自身的文件——配置与扩展安装副本——**仅用户可改**:门禁之内的写入一律硬 deny(读放行);你的编辑器修改不经门禁,最近的同构先例是 sudoers 必须经 visudo。
