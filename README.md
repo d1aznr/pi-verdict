@@ -113,12 +113,17 @@ No built-in allowlist — every "always allow" claim is yours ([why](docs/config
 
 ### Jev decisions backend (experimental — [ADR-0003](docs/adr/0003-jev-decisions-adapter.md))
 
-`classifierModel: "typesafe/jev-latest"` sends gray-zone verdicts through TypeSafe's jev — a **decisions model, not an LLM**. Answers arrive as a typed choice with probabilities and confidence (`jev: ask 63% (confidence 45%; allow 35%, deny 2%)`) at ~1.2s and ~$0.000015 per verdict.
+1. Install a version that ships the adapter (v0.8+): `pi install npm:pi-verdict`
+2. Get your OpenRouter credentials ready (OpenRouter is the only transport for now)
+   - run `/login openrouter` inside pi
+   - or `export OPENROUTER_API_KEY=sk-or-v1...` in your shell
+3. Point the classifier at jev (applies to new sessions)
+   - persistent: edit `~/.pi/agent/config/pi-verdict.json` outside pi and set `{ "classifierModel": "typesafe/jev-latest" }`
+   - or try it once: `PI_AUTO_MODE_MODEL=typesafe/jev-latest pi`
 
-- **Setup**: needs a version shipping `extensions/jev-adapter.ts` (git installs today, npm after the next release). Credentials: run `/login openrouter` inside pi, or export `OPENROUTER_API_KEY` — no separate typesafe account
-- **Provider**: OpenRouter transport only; the model rides the adapter-registered `typesafe` provider, not pi's built-in `openrouter` provider (chat completions only, cannot serve decisions models)
-- **Hosts**: pi only — on omp the setting falls back to the session model with a warning. Never usable as the session model itself (no text generation — selecting it warns)
-- **Capability limits**: reasons are templated probabilities, not natural language; the denyPaths existence hint and thinking suffixes don't reach it; jev "does not treat state as hostile by default" (TypeSafe docs) — adversarial transcript content can move its judgment, so the rule layer stays the primary defense
+**Limits**:
+- **Provider**: OpenRouter only, for now
+- **Hosts**: pi only. On omp the setting warns and falls back to the session model; and it must never be selected as the session model (no text generation — selecting it warns)
 - **Escape hatch**: `PI_VERDICT_JEV_URL` overrides the decisions endpoint (alpha API)
 
 ### Self-protection (the gate guards itself — [ADR-0001](docs/adr/0001-self-protection-layer.md))
