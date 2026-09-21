@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-21
+
 ### Changed
 
 - Confidence floor semantics (#67, [ADR-0004 amendment](docs/adr/0004-classifier-fallback-cascade.md)): the cascade gate becomes an **autonomy floor**. `classifierFallbackConfidence` is renamed **`classifierMinConfidence`** (`number | null`, default null = off; the old key warns as renamed and is ignored — clean break, no alias) and now means: a jev verdict with confidence strictly below the floor is **demoted, whatever the verdict** (allow/ask/deny alike) — cascaded to the fallback if `classifierFallbackModel` is set, otherwise asked of the user directly (non-interactive degrades to deny). The floor works standalone without a second layer, and is inert for LLM first layers (no numeric confidence). High-confidence asks no longer consult the fallback (the 0.10.0 ask-trigger is gone).
