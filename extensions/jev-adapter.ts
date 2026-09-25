@@ -56,7 +56,7 @@ export type Transport = (typeof TRANSPORTS)[number];
  * endpoint, the model slug it expects (OpenRouter wants the `~latest` alias;
  * TypeSafe's own API wants the bare slug), the provider/auth display names,
  * the credential sources, and the missing-key error hint. PI_VERDICT_JEV_URL
- * overrides either endpoint. */
+ * overrides either endpoint; PI_VERDICT_JEV_MODEL overrides the model slug. */
 export interface TransportConfig {
 	/** Decisions endpoint (PI_VERDICT_JEV_URL overrides). */
 	url: string;
@@ -101,8 +101,12 @@ export function decisionsUrl(transport: Transport = activeTransport()): string {
 	return process.env.PI_VERDICT_JEV_URL?.trim() || TRANSPORT_DEFAULTS[transport].url;
 }
 
+/** The model slug the active endpoint expects. PI_VERDICT_JEV_MODEL overrides
+ *  the transport default — the slug-side mirror of PI_VERDICT_JEV_URL, for
+ *  gateways and proxies that expose the decisions API under a different name.
+ *  Read per call like decisionsUrl (env is constant for the process lifetime). */
 export function wireModel(transport: Transport = activeTransport()): string {
-	return TRANSPORT_DEFAULTS[transport].wireModel;
+	return process.env.PI_VERDICT_JEV_MODEL?.trim() || TRANSPORT_DEFAULTS[transport].wireModel;
 }
 
 const VERDICTS = ["allow", "ask", "deny"] as const;

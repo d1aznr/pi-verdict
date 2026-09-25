@@ -29,6 +29,7 @@ const TMP_AGENT = fs.mkdtempSync(path.join(os.tmpdir(), "pi-verdict-jev-test-"))
 const SAVED_OR_KEY = process.env.OPENROUTER_API_KEY;
 const SAVED_JEV_URL = process.env.PI_VERDICT_JEV_URL;
 const SAVED_JEV_TRANSPORT = process.env.PI_VERDICT_JEV_TRANSPORT;
+const SAVED_JEV_MODEL = process.env.PI_VERDICT_JEV_MODEL;
 const SAVED_TS_KEY = process.env.TYPESAFE_API_KEY;
 
 function restoreEnv(name: string, saved: string | undefined): void {
@@ -41,6 +42,7 @@ beforeAll(() => {
 	delete process.env.OPENROUTER_API_KEY;
 	delete process.env.PI_VERDICT_JEV_URL;
 	delete process.env.PI_VERDICT_JEV_TRANSPORT;
+	delete process.env.PI_VERDICT_JEV_MODEL;
 	delete process.env.TYPESAFE_API_KEY;
 	const p = path.join(TMP_AGENT, "config", "pi-verdict.json");
 	fs.mkdirSync(path.dirname(p), { recursive: true });
@@ -51,6 +53,7 @@ afterAll(() => {
 	restoreEnv("OPENROUTER_API_KEY", SAVED_OR_KEY);
 	restoreEnv("PI_VERDICT_JEV_URL", SAVED_JEV_URL);
 	restoreEnv("PI_VERDICT_JEV_TRANSPORT", SAVED_JEV_TRANSPORT);
+	restoreEnv("PI_VERDICT_JEV_MODEL", SAVED_JEV_MODEL);
 	restoreEnv("TYPESAFE_API_KEY", SAVED_TS_KEY);
 	fs.rmSync(TMP_AGENT, { recursive: true, force: true });
 });
@@ -307,6 +310,7 @@ describe("transport selection and endpoint override", () => {
 	afterEach(() => {
 		delete process.env.PI_VERDICT_JEV_TRANSPORT;
 		delete process.env.PI_VERDICT_JEV_URL;
+		delete process.env.PI_VERDICT_JEV_MODEL;
 	});
 	test("defaults to the OpenRouter alpha decisions endpoint", () => {
 		expect(activeTransport()).toBe("openrouter");
@@ -328,6 +332,15 @@ describe("transport selection and endpoint override", () => {
 		process.env.PI_VERDICT_JEV_URL = "https://proxy.example/decisions";
 		expect(decisionsUrl("openrouter")).toBe("https://proxy.example/decisions");
 		expect(decisionsUrl("typesafe")).toBe("https://proxy.example/decisions");
+	});
+	test("PI_VERDICT_JEV_MODEL overrides either transport's slug", () => {
+		process.env.PI_VERDICT_JEV_MODEL = "oc/jev-1.13-free";
+		expect(wireModel("openrouter")).toBe("oc/jev-1.13-free");
+		expect(wireModel("typesafe")).toBe("oc/jev-1.13-free");
+	});
+	test("an empty PI_VERDICT_JEV_MODEL falls back to the transport default", () => {
+		process.env.PI_VERDICT_JEV_MODEL = "  ";
+		expect(wireModel("typesafe")).toBe("jev-latest");
 	});
 	test("TRANSPORT_DEFAULTS pins both wire contracts", () => {
 		expect(TRANSPORT_DEFAULTS.openrouter).toMatchObject({ url: "https://openrouter.ai/api/alpha/decisions", wireModel: "~typesafe/jev-latest", keyEnv: "OPENROUTER_API_KEY", loginProvider: "openrouter" });
